@@ -63,6 +63,9 @@ jobs:
     env:
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       APPHOSTING_BACKEND_ID: ${{ vars.APPHOSTING_BACKEND_ID }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
     steps:
       - name: Ensure main branch
@@ -99,22 +102,22 @@ jobs:
         id: auth_oidc
         uses: google-github-actions/auth@v2
         continue-on-error: true
-        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
+        if: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && env.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT_EMAIL }}
           create_credentials_file: true
 
       - name: Authenticate via service account key fallback
         id: auth_key
         uses: google-github-actions/auth@v2
-        if: ${{ steps.auth_oidc.outcome != 'success' && secrets.FIREBASE_SERVICE_ACCOUNT_JSON != '' }}
+        if: ${{ steps.auth_oidc.outcome != 'success' && env.FIREBASE_SERVICE_ACCOUNT_JSON != '' }}
         with:
-          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          credentials_json: ${{ env.FIREBASE_SERVICE_ACCOUNT_JSON }}
           create_credentials_file: true
 
       - name: Ensure a deploy auth path is configured
-        if: ${{ steps.auth_oidc.outcome != 'success' && steps.auth_key.outcome != 'success' && secrets.FIREBASE_TOKEN == '' }}
+        if: ${{ steps.auth_oidc.outcome != 'success' && steps.auth_key.outcome != 'success' && env.FIREBASE_TOKEN == '' }}
         run: |
           echo "Authentication failed."
           echo "Configure OIDC secrets, FIREBASE_SERVICE_ACCOUNT_JSON, or FIREBASE_TOKEN."
