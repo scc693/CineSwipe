@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { TMDB_BASE_URL, TMDB_CACHE_TTL_HOURS, TMDB_IMAGE_BASE_URL } from "@/lib/constants";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { MediaSummary, MediaType } from "@/lib/types";
@@ -88,18 +89,19 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return query.toString();
 }
 
-function cacheKey(path: string, params: Record<string, string | number | boolean | undefined>): string {
-  const sorted = Object.entries(params)
+function cacheDocId(path: string, params: Record<string, string | number | boolean | undefined>): string {
+  const sortedParams = Object.entries(params)
     .filter((entry) => entry[1] !== undefined)
     .sort((a, b) => a[0].localeCompare(b[0]));
-  return `${path}?${sorted.map(([k, v]) => `${k}=${String(v)}`).join("&")}`;
+  const canonicalKey = `${path}?${sortedParams.map(([k, v]) => `${k}=${String(v)}`).join("&")}`;
+  return createHash("sha256").update(canonicalKey).digest("hex");
 }
 
 async function tmdbGet<T>(
   path: string,
   params: Record<string, string | number | boolean | undefined> = {}
 ): Promise<T> {
-  const key = cacheKey(path, params);
+  const key = cacheDocId(path, params);
   const cached = await getCached<T>(key);
   if (cached) return cached;
 
