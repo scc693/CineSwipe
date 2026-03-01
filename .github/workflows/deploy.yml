@@ -1,0 +1,126 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure main branch
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "This workflow must be run from main. Current ref: ${GITHUB_REF}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Java (for Firestore emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Firestore rules tests
+        run: npm run test:rules
+
+  deploy:
+    name: Deploy Firestore + App Hosting
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: production
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      APPHOSTING_BACKEND_ID: ${{ vars.APPHOSTING_BACKEND_ID }}
+    steps:
+      - name: Ensure main branch
+        run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "This workflow must be run from main. Current ref: ${GITHUB_REF}"
+            exit 1
+          fi
+
+      - name: Validate required environment variables
+        run: |
+          if [ -z "${FIREBASE_PROJECT_ID}" ]; then
+            echo "Missing required environment variable: FIREBASE_PROJECT_ID"
+            exit 1
+          fi
+          if [ -z "${APPHOSTING_BACKEND_ID}" ]; then
+            echo "Missing required environment variable: APPHOSTING_BACKEND_ID"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Authenticate to Google Cloud via OIDC
+        id: auth_oidc
+        uses: google-github-actions/auth@v2
+        continue-on-error: true
+        if: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+
+      - name: Authenticate via service account key fallback
+        id: auth_key
+        uses: google-github-actions/auth@v2
+        if: ${{ steps.auth_oidc.outcome != 'success' && secrets.FIREBASE_SERVICE_ACCOUNT_JSON != '' }}
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          create_credentials_file: true
+
+      - name: Ensure a Google Cloud auth path is configured
+        if: ${{ steps.auth_oidc.outcome != 'success' && steps.auth_key.outcome != 'success' }}
+        run: |
+          echo "Authentication failed."
+          echo "Configure OIDC secrets or provide FIREBASE_SERVICE_ACCOUNT_JSON as fallback."
+          exit 1
+
+      - name: Deploy Firestore rules and indexes
+        run: npx firebase-tools deploy --project "${FIREBASE_PROJECT_ID}" --only firestore:rules,firestore:indexes --non-interactive
+
+      - name: Create App Hosting rollout from main
+        run: npx firebase-tools apphosting:rollouts:create "${APPHOSTING_BACKEND_ID}" --project "${FIREBASE_PROJECT_ID}" --git-branch main --force --non-interactive

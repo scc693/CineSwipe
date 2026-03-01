@@ -142,3 +142,47 @@ GitHub Actions workflow is defined at `.github/workflows/ci.yml` and runs on eve
 - unit tests
 - production build
 - Firestore emulator-backed rules tests
+
+## Deployment (GitHub Actions)
+
+Manual production deployment is defined at `.github/workflows/deploy.yml` and deploys:
+
+- Firestore rules + indexes
+- Firebase App Hosting rollout for `main`
+
+### 1) Create GitHub `production` environment
+
+In GitHub, create an environment named `production` and add:
+
+- Environment variables:
+  - `FIREBASE_PROJECT_ID`
+  - `APPHOSTING_BACKEND_ID`
+- Secrets (OIDC path):
+  - `GCP_WORKLOAD_IDENTITY_PROVIDER`
+  - `GCP_SERVICE_ACCOUNT_EMAIL`
+- Optional fallback secret:
+  - `FIREBASE_SERVICE_ACCOUNT_JSON`
+
+### 2) Configure Firebase App Hosting
+
+Create an App Hosting backend once (replace placeholders):
+
+```bash
+npx firebase-tools apphosting:backends:create --project <firebase-project-id> --backend <backend-id> --primary-region <region> --root-dir .
+```
+
+Use the same backend id for `APPHOSTING_BACKEND_ID`.
+
+### 3) Configure OIDC (recommended)
+
+Grant the GitHub Actions identity permission to impersonate your deploy service account, and grant deploy permissions in Firebase/GCP to that service account. The deploy workflow uses OIDC first, then falls back to `FIREBASE_SERVICE_ACCOUNT_JSON` only if OIDC is unavailable.
+
+### 4) Run deploy
+
+From GitHub Actions, run the `Deploy` workflow manually on branch `main`.
+
+The workflow enforces:
+
+- branch must be `main`
+- full validation (`lint`, `test`, `build`, `test:rules`) before deploy
+- serialized production deploys via workflow concurrency
