@@ -1,0 +1,16 @@
+{
+  "name": "CineSwipe",
+  "short_name": "CineSwipe",
+  "description": "Swipe to discover your next movie or show.",
+  "start_url": "/discover",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#d84f2a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

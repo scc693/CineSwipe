@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // User root document
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // Profile document: users/{uid}/profile/main
+      match /profile/{profileId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Seed titles selected by user
+      match /seeds/{seedId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Swipe interaction history
+      match /interactions/{interactionId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Not-interested hidden titles with expiry
+      match /hidden/{hiddenId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Watchlist and rewatch list items
+      match /lists/{listType}/items/{mediaId} {
+        allow read, write: if isOwner(uid)
+          && (listType == "watchlist" || listType == "rewatch");
+      }
+    }
+
+    // Server-only cache collection. Deny client SDK access.
+    match /tmdb_cache/{cacheId} {
+      allow read, write: if false;
+    }
+
+    // Deny by default for any unspecified path.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

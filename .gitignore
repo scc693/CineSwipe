@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+coverage
+.firebase
+playwright-report
+test-results
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+firebase-debug.log
+firestore-debug.log
+.env.local
+.env
+*.gitignored
+.DS_Store
