@@ -9,16 +9,17 @@ function getServiceAccount() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-  const hasAnyCredentialPart = Boolean(projectId || clientEmail || privateKey);
   const hasAllCredentialParts = Boolean(projectId && clientEmail && privateKey);
+  const hasAnyKeyCredentialPart = Boolean(clientEmail || privateKey);
 
   if (hasAllCredentialParts) {
     return { projectId, clientEmail, privateKey };
   }
 
-  if (hasAnyCredentialPart) {
+  // Allow ADC fallback when only FIREBASE_PROJECT_ID is present.
+  if (hasAnyKeyCredentialPart) {
     throw new Error(
-      "Incomplete Firebase Admin credentials. Set all of FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY, or omit all three to use default credentials."
+      "Incomplete Firebase Admin key credentials. If using key-based auth, set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY together."
     );
   }
 
