@@ -9,13 +9,20 @@ function getServiceAccount() {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-  if (!projectId || !clientEmail || !privateKey) {
+  const hasAnyCredentialPart = Boolean(projectId || clientEmail || privateKey);
+  const hasAllCredentialParts = Boolean(projectId && clientEmail && privateKey);
+
+  if (hasAllCredentialParts) {
+    return { projectId, clientEmail, privateKey };
+  }
+
+  if (hasAnyCredentialPart) {
     throw new Error(
-      "Firebase Admin env vars are missing. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY."
+      "Incomplete Firebase Admin credentials. Set all of FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY, or omit all three to use default credentials."
     );
   }
 
-  return { projectId, clientEmail, privateKey };
+  return null;
 }
 
 export function getAdminApp(): App {
@@ -28,7 +35,19 @@ export function getAdminApp(): App {
     return app;
   }
 
-  app = initializeApp({ credential: cert(getServiceAccount()) });
+  const serviceAccount = getServiceAccount();
+  if (serviceAccount) {
+    app = initializeApp({ credential: cert(serviceAccount) });
+    return app;
+  }
+
+  // In managed runtimes (e.g. App Hosting), ADC can be used without key env vars.
+  if (process.env.FIREBASE_PROJECT_ID) {
+    app = initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID });
+    return app;
+  }
+
+  app = initializeApp();
   return app;
 }
 

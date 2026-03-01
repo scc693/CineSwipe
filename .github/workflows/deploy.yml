@@ -63,6 +63,7 @@ jobs:
     env:
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       APPHOSTING_BACKEND_ID: ${{ vars.APPHOSTING_BACKEND_ID }}
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
     steps:
       - name: Ensure main branch
         run: |
@@ -112,15 +113,31 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           create_credentials_file: true
 
-      - name: Ensure a Google Cloud auth path is configured
-        if: ${{ steps.auth_oidc.outcome != 'success' && steps.auth_key.outcome != 'success' }}
+      - name: Ensure a deploy auth path is configured
+        if: ${{ steps.auth_oidc.outcome != 'success' && steps.auth_key.outcome != 'success' && secrets.FIREBASE_TOKEN == '' }}
         run: |
           echo "Authentication failed."
-          echo "Configure OIDC secrets or provide FIREBASE_SERVICE_ACCOUNT_JSON as fallback."
+          echo "Configure OIDC secrets, FIREBASE_SERVICE_ACCOUNT_JSON, or FIREBASE_TOKEN."
           exit 1
 
       - name: Deploy Firestore rules and indexes
-        run: npx firebase-tools deploy --project "${FIREBASE_PROJECT_ID}" --only firestore:rules,firestore:indexes --non-interactive
+        run: |
+          if [ "${{ steps.auth_oidc.outcome }}" = "success" ] || [ "${{ steps.auth_key.outcome }}" = "success" ]; then
+            npx firebase-tools deploy --project "${FIREBASE_PROJECT_ID}" --only firestore:rules,firestore:indexes --non-interactive
+          elif [ -n "${FIREBASE_TOKEN}" ]; then
+            npx firebase-tools deploy --project "${FIREBASE_PROJECT_ID}" --only firestore:rules,firestore:indexes --non-interactive --token "${FIREBASE_TOKEN}"
+          else
+            echo "No valid auth path for Firebase deploy."
+            exit 1
+          fi
 
       - name: Create App Hosting rollout from main
-        run: npx firebase-tools apphosting:rollouts:create "${APPHOSTING_BACKEND_ID}" --project "${FIREBASE_PROJECT_ID}" --git-branch main --force --non-interactive
+        run: |
+          if [ "${{ steps.auth_oidc.outcome }}" = "success" ] || [ "${{ steps.auth_key.outcome }}" = "success" ]; then
+            npx firebase-tools apphosting:rollouts:create "${APPHOSTING_BACKEND_ID}" --project "${FIREBASE_PROJECT_ID}" --git-branch main --force --non-interactive
+          elif [ -n "${FIREBASE_TOKEN}" ]; then
+            npx firebase-tools apphosting:rollouts:create "${APPHOSTING_BACKEND_ID}" --project "${FIREBASE_PROJECT_ID}" --git-branch main --force --non-interactive --token "${FIREBASE_TOKEN}"
+          else
+            echo "No valid auth path for App Hosting rollout."
+            exit 1
+          fi

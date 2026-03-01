@@ -160,12 +160,13 @@ In GitHub, create an environment named `production` and add:
 - Secrets (OIDC path):
   - `GCP_WORKLOAD_IDENTITY_PROVIDER`
   - `GCP_SERVICE_ACCOUNT_EMAIL`
-- Optional fallback secret:
+- Optional fallback secrets:
   - `FIREBASE_SERVICE_ACCOUNT_JSON`
+  - `FIREBASE_TOKEN`
 
 ### 2) Configure Firebase App Hosting
 
-Create an App Hosting backend once (replace placeholders):
+Create and link an App Hosting backend once (replace placeholders):
 
 ```bash
 npx firebase-tools apphosting:backends:create --project <firebase-project-id> --backend <backend-id> --primary-region <region> --root-dir .
@@ -173,9 +174,28 @@ npx firebase-tools apphosting:backends:create --project <firebase-project-id> --
 
 Use the same backend id for `APPHOSTING_BACKEND_ID`.
 
-### 3) Configure OIDC (recommended)
+Then, in Firebase Console -> App Hosting, ensure the backend is connected to your GitHub repository and branch (`main`). Rollouts from this repo require that link.
 
-Grant the GitHub Actions identity permission to impersonate your deploy service account, and grant deploy permissions in Firebase/GCP to that service account. The deploy workflow uses OIDC first, then falls back to `FIREBASE_SERVICE_ACCOUNT_JSON` only if OIDC is unavailable.
+This repo includes `apphosting.yaml` with Firebase web config values and expects one App Hosting secret:
+
+- `tmdb-api-key` (used by `TMDB_API_KEY`)
+
+Set it with:
+
+```bash
+printf '%s' '<your-tmdb-api-key>' | npx firebase-tools apphosting:secrets:set tmdb-api-key --project <firebase-project-id> --data-file - --force
+```
+
+### 3) Configure deploy authentication
+
+Preferred: OIDC. Grant the GitHub Actions identity permission to impersonate your deploy service account, and grant deploy permissions in Firebase/GCP to that service account.
+
+Fallbacks (in priority order used by workflow):
+
+1. `FIREBASE_SERVICE_ACCOUNT_JSON`
+2. `FIREBASE_TOKEN`
+
+The deploy workflow attempts OIDC first, then service-account JSON, then Firebase CLI token.
 
 ### 4) Run deploy
 
